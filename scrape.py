@@ -1,0 +1,171 @@
+# from pypdf import PdfReader
+import pdfplumber
+import pprint
+pp = pprint.PrettyPrinter(indent=4)
+
+def curves_to_edges(cs):
+    edges = []
+
+    for c in cs:
+        if ('y0' in c and 'y1' in c and 'x0' in c and 'x1' in c):
+            edges += pdfplumber.utils.rect_to_edges(c)
+    return edges
+
+def extract_tables(path, page):
+    with pdfplumber.open(path) as pdf:
+        p = pdf.pages[page]
+
+        # Table settings.
+        ts = {
+            "vertical_strategy": "explicit",
+            "horizontal_strategy": "explicit",
+            "explicit_vertical_lines": curves_to_edges(p.curves + p.edges),
+            "explicit_horizontal_lines": curves_to_edges(p.curves + p.edges),
+            "intersection_y_tolerance": 10,
+        }
+
+        # Get the bounding boxes of the tables on the page.
+        bboxes = [table.bbox for table in p.find_tables(
+            table_settings=ts
+        )]
+
+        def not_within_bboxes(obj):
+            def obj_in_bbox(_bbox):
+                v_mid = (obj["top"] + obj["bottom"]) / 2
+                h_mid = (obj["x0"] + obj["x1"]) / 2
+                x0, top, x1, bottom = _bbox
+                return (h_mid >= x0) and (h_mid < x1) and (v_mid >= top) and (v_mid < bottom)
+            return not any(obj_in_bbox(__bbox) for __bbox in bboxes)
+
+        text_outside_tables = p.filter(not_within_bboxes).extract_text(use_text_flow=True).split('\n')
+        tables = p.extract_tables()
+        table_positions = p.find_tables()
+        word_positions = p.extract_words()
+
+        return tables, text_outside_tables, word_positions, table_positions
+
+# def extract_text(path, page):
+#     with open(path, 'rb') as file:
+#         reader = PdfReader(file)
+#         page_text = reader.pages[page].extract_text()
+
+#         return page_text
+    
+def extract_text(path, page):
+    with pdfplumber.open(path) as pdf:
+        p = pdf.pages[page]
+        text = p.extract_text(use_text_flow=True)
+
+        return text
+
+# Tables: Table[]
+# Table: Row[]
+# Row: Cell[]
+# Cell: string | None
+def part_of_table(text, tables, table_positions):
+    stripped_text = text.strip()
+
+    for i, table in enumerate(tables):
+        for row in table:
+            row_text = ''.join(filter(lambda x: x is not None, row))
+
+            if stripped_text in row_text:
+                return table_positions[i]
+            
+    return None
+
+def part_of_document(text, page_text_without_tables):
+    # pp.pprint(text + '\n')
+    # pp.pprint(page_text_without_tables)
+
+    if text in page_text_without_tables:
+        return 
+
+    return text
+
+def get_table_indexes(full_text, text_without_tables):
+    pp.pprint(full_text)
+    print('\n')
+    pp.pprint(text_without_tables)
+    missing_indices = []
+    i = 0
+    j = 0
+    while i < len(text_without_tables):
+        current_line = text_without_tables[i]
+        if i == len(text_without_tables) - 1 and j < len(full_text) - 1:
+            missing_indices.append(i + 1)
+            break
+        elif j < len(full_text) and full_text[j] != current_line:
+            missing_indices.append(i)
+
+            while j < len(full_text) and full_text[j] != current_line:
+                j += 1
+        else:
+            i += 1
+            j += 1
+
+    return missing_indices
+
+
+pdf_path = 'files/ldAK6023.pdf'  # Replace 'example.pdf' with the path to your PDF file
+page_text_by_column = extract_text(pdf_path, 0).split('\n')
+page_tables, page_text_without_tables, word_positions, table_positions = extract_tables(pdf_path, 0)
+page_number = page_text_by_column[0]
+
+# skip the page number and \n
+try:
+    page_number + 1
+    text_lines = page_text_by_column[1:None]
+    text_lines_without_tables = page_text_without_tables[1:None]
+except:
+    text_lines = page_text_by_column
+    text_lines_without_tables = page_text_without_tables
+
+table_indexes = get_table_indexes(text_lines, text_lines_without_tables)
+
+pp.pprint(table_indexes)
+# for idx in table_indexes:
+#     pp.pprint(text_lines_without_tables[idx] + '\n')
+
+line_number = 0
+
+# while line_number < len(text_lines):
+current_line = text_lines[line_number]
+
+# table = part_of_table(current_line, page_tables, table_positions)
+# word = part_of_document(current_line, text_lines_without_tables)
+
+line_number += 1
+table_num = 0
+
+with open('output.txt', 'w') as file:
+    for i, line in enumerate(text_lines_without_tables):
+        if (i in table_indexes):
+            # file.write(page_tables[table_num])
+            file.write(f'TABLE_HERE: {table_num}')
+            file.write('\n')
+            table_num += 1
+        else:
+            file.write(line + '\n')
+    
+    while table_num < len(page_tables):
+        # file.write(page_tables[table_num])
+        file.write(f'TABLE_HERE: {table_num}')
+        file.write('\n')
+        table_num += 1
+
+
+
+
+# pp.pprint(text_order)
+
+# pp.pprint('\n\n')
+# pp.pprint('table_positions')
+# pp.pprint(table_positions)
+# pp.pprint('\n\n')
+# pp.pprint('word_positions')
+# pp.pprint(word_positions)
+# pp.pprint('\n\n')
+# pp.pprint('page_tables')
+# pp.pprint(page_tables)
+# pp.pprint('\n\n')
