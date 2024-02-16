@@ -1,6 +1,9 @@
 # from pypdf import PdfReader
 import pdfplumber
 import pprint
+from prettytable import PrettyTable
+import copy
+
 pp = pprint.PrettyPrinter(indent=4)
 
 def curves_to_edges(cs):
@@ -84,9 +87,9 @@ def part_of_document(text, page_text_without_tables):
     return text
 
 def get_table_indexes(full_text, text_without_tables):
-    pp.pprint(full_text)
-    print('\n')
-    pp.pprint(text_without_tables)
+    # pp.pprint(full_text)
+    # print('\n')
+    # pp.pprint(text_without_tables)
     missing_indices = []
     i = 0
     j = 0
@@ -106,15 +109,68 @@ def get_table_indexes(full_text, text_without_tables):
 
     return missing_indices
 
+def list_to_table(original_list):
 
+    # Single column tables, treat as text
+    text_output = ''
+    if len(original_list[0]) == 1:
+        for row in original_list:
+            text_output += row[0].replace('\n', '<br>') + '\n'
+        return text_output
+
+    list = copy.deepcopy(original_list)
+    
+    for row_index, row in enumerate(original_list):
+        for cell_index, cell in enumerate(row):
+            if (cell is None):
+                if row_index == 0 and cell_index == 0:
+                    list[row_index][cell_index] = ''
+                elif row_index == 0:
+                    list[row_index][cell_index] = row[cell_index - 1]
+                elif cell_index == 0:
+                    list[row_index][cell_index] = list[row_index - 1][cell_index]
+                else:
+                    left_cell = row[cell_index - 1]
+                    up_cell = list[row_index - 1][cell_index]
+                    # row merge, get from left
+                    if up_cell is None or left_cell[2] >= up_cell[2]:
+                        list[row_index][cell_index] = left_cell
+                    # column merge, get from above
+                    elif left_cell is None or up_cell[3] >= left_cell[3]:
+                        list[row_index][cell_index] = up_cell
+                    else:
+                        list[row_index][cell_index] = ''
+
+    seen = {}
+    headers = []
+    if len(set(list[0])) != len(list[0]):
+        for field in list[0]:
+            if field in seen:
+                headers.append(field + ' ')
+                seen[field + ' '] = True
+            else:
+                headers.append(field)
+                seen[field] = True
+    else:
+        headers = list[0]
+
+    pt = PrettyTable()
+    pt.field_names = headers
+    pt.add_rows(list[1:None])
+
+    return str(pt)
+
+
+
+page_number = 1
 pdf_path = 'files/ldAK6023.pdf'  # Replace 'example.pdf' with the path to your PDF file
-page_text_by_column = extract_text(pdf_path, 0).split('\n')
-page_tables, page_text_without_tables, word_positions, table_positions = extract_tables(pdf_path, 0)
-page_number = page_text_by_column[0]
+page_text_by_column = extract_text(pdf_path, page_number).split('\n')
+page_tables, page_text_without_tables, word_positions, table_positions = extract_tables(pdf_path, page_number)
 
-# skip the page number and \n
 try:
-    page_number + 1
+    page_number_test = int(page_text_by_column[0])
+    ## if the page starts with page number ( if not, next line will throw )
+    page_number_test + 1
     text_lines = page_text_by_column[1:None]
     text_lines_without_tables = page_text_without_tables[1:None]
 except:
@@ -124,33 +180,20 @@ except:
 table_indexes = get_table_indexes(text_lines, text_lines_without_tables)
 
 pp.pprint(table_indexes)
-# for idx in table_indexes:
-#     pp.pprint(text_lines_without_tables[idx] + '\n')
-
-line_number = 0
-
-# while line_number < len(text_lines):
-current_line = text_lines[line_number]
-
-# table = part_of_table(current_line, page_tables, table_positions)
-# word = part_of_document(current_line, text_lines_without_tables)
-
-line_number += 1
-table_num = 0
 
 with open('output.txt', 'w') as file:
+    table_num = 0
     for i, line in enumerate(text_lines_without_tables):
+        # print(page_tables[table_num])
         if (i in table_indexes):
-            # file.write(page_tables[table_num])
-            file.write(f'TABLE_HERE: {table_num}')
+            file.write(list_to_table(page_tables[table_num]))
             file.write('\n')
             table_num += 1
         else:
             file.write(line + '\n')
     
     while table_num < len(page_tables):
-        # file.write(page_tables[table_num])
-        file.write(f'TABLE_HERE: {table_num}')
+        file.write(list_to_table(page_tables[table_num]))
         file.write('\n')
         table_num += 1
 
