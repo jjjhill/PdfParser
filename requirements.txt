@@ -1,0 +1,2 @@
+pdfplumber @ git+https://github.com/jjjhill/pdfplumber
+requests==2.31.0

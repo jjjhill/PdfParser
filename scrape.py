@@ -1,8 +1,8 @@
-# from pypdf import PdfReader
 import pdfplumber
 import pprint
-from prettytable import PrettyTable
-import copy
+from operator import itemgetter
+from functools import cmp_to_key
+import os
 
 pp = pprint.PrettyPrinter(indent=4)
 
@@ -14,82 +14,115 @@ def curves_to_edges(cs):
             edges += pdfplumber.utils.rect_to_edges(c)
     return edges
 
-def extract_tables(path, page):
-    with pdfplumber.open(path) as pdf:
-        p = pdf.pages[page]
+def get_horizontal_lines(page):
+    horiz_lines = filter(lambda x: x['orientation'] == 'h' and "y0" in x, page.edges)
+    by_y0 = pdfplumber.utils.clustering.cluster_objects(list(horiz_lines), itemgetter('y0'), 1)
+    new_lines = []
+    for cluster in by_y0:
+        line = pdfplumber.utils.merge_bboxes(map(pdfplumber.utils.obj_to_bbox, cluster))
+        new_lines.append(line)
 
-        # Table settings.
-        ts = {
-            "vertical_strategy": "explicit",
-            "horizontal_strategy": "explicit",
-            "explicit_vertical_lines": curves_to_edges(p.curves + p.edges),
-            "explicit_horizontal_lines": curves_to_edges(p.curves + p.edges),
-            "intersection_y_tolerance": 10,
-        }
+    return new_lines
 
-        # Get the bounding boxes of the tables on the page.
-        bboxes = [table.bbox for table in p.find_tables(
-            table_settings=ts
-        )]
+def extract_tables(pdf, page):
+    p = pdf.pages[page]
 
-        def not_within_bboxes(obj):
-            def obj_in_bbox(_bbox):
-                v_mid = (obj["top"] + obj["bottom"]) / 2
-                h_mid = (obj["x0"] + obj["x1"]) / 2
-                x0, top, x1, bottom = _bbox
-                return (h_mid >= x0) and (h_mid < x1) and (v_mid >= top) and (v_mid < bottom)
-            return not any(obj_in_bbox(__bbox) for __bbox in bboxes)
-
-        text_outside_tables = p.filter(not_within_bboxes).extract_text(use_text_flow=True).split('\n')
-        tables = p.extract_tables()
-        table_positions = p.find_tables()
-        word_positions = p.extract_words()
-
-        return tables, text_outside_tables, word_positions, table_positions
-
-# def extract_text(path, page):
-#     with open(path, 'rb') as file:
-#         reader = PdfReader(file)
-#         page_text = reader.pages[page].extract_text()
-
-#         return page_text
+    table_settings = {
+        "vertical_strategy": "lines",
+        "horizontal_strategy": "lines",
+        # "explicit_vertical_lines": curves_to_edges(p.curves + p.edges),
+        # "explicit_horizontal_lines": curves_to_edges(p.curves + p.edges),
+        "intersection_y_tolerance": 2,
+        "snap_y_tolerance": 5,
+    }
     
-def extract_text(path, page):
-    with pdfplumber.open(path) as pdf:
-        p = pdf.pages[page]
-        text = p.extract_text(use_text_flow=True)
+    img = p.to_image(resolution=400)
+    img.debug_tablefinder(table_settings)
+    img.save('debug.png')
 
-        return text
+    tables = p.extract_tables(table_settings)
+    tables_bboxes = p.find_tables(table_settings)
 
-# Tables: Table[]
-# Table: Row[]
-# Row: Cell[]
-# Cell: string | None
-def part_of_table(text, tables, table_positions):
-    stripped_text = text.strip()
+    p1 = p.crop((0, 0, p.bbox[2]/2, p.bbox[3]))
+    p2 = p.crop((p.bbox[2]/2, 0, p.bbox[2], p.bbox[3]))
+    lines_p1 = get_horizontal_lines(p1)
+    lines_p2 = get_horizontal_lines(p2)
 
-    for i, table in enumerate(tables):
-        for row in table:
-            row_text = ''.join(filter(lambda x: x is not None, row))
+    def contains_consecutive_horizontal_lines(lines, count):
+        consecutive = 1
+        prev_y_diff = None
+        for i, line in enumerate(lines):
+            if i == 0:
+                continue
+            y_diff = lines[i-1][1] - line[1]
+            if y_diff < 50 and (prev_y_diff is None or abs(y_diff - prev_y_diff) < 1):
+                consecutive += 1
+                prev_y_diff = y_diff
+            else:
+                consecutive = 1
+            if consecutive >= count:
+                # print(f'At least {count} consecutive lines')
+                return True
+        
+        # print('no consecutive lines')
+        return False
 
-            if stripped_text in row_text:
-                return table_positions[i]
-            
-    return None
+    if len(tables) == 0 and (contains_consecutive_horizontal_lines(lines_p1, 3) or contains_consecutive_horizontal_lines(lines_p2, 3)):
+        table_settings = {
+            "vertical_strategy": "text_and_horizontal_line_vertices",
+            "horizontal_strategy": "lines",
+            "min_words_vertical": 5,
+        }
+        p1 = p.crop((0, 0, p.bbox[2]/2, p.bbox[3]))
+        p2 = p.crop((p.bbox[2]/2, 0, p.bbox[2], p.bbox[3]))
 
-def part_of_document(text, page_text_without_tables):
-    # pp.pprint(text + '\n')
-    # pp.pprint(page_text_without_tables)
+        img = p1.to_image(resolution=400)
+        img.debug_tablefinder(table_settings)
+        img.save('debug.png')
 
-    if text in page_text_without_tables:
-        return 
+        p1tables = p1.extract_tables(table_settings)
+        p2tables = p2.extract_tables(table_settings)
+        tables = p1tables + p2tables
+        tables_bboxes = p1.find_tables(table_settings) + p2.find_tables(table_settings)
+
+    
+    def sort_tables(item1, item2):
+        x_diff = item1[1].bbox[0] - item2[1].bbox[0]
+        y_diff = item1[1].bbox[1] - item2[1].bbox[1]
+        if abs(x_diff) < 10:
+            return y_diff
+        else:
+            return x_diff
+        
+        
+    
+    tables_with_bboxes = tuple(zip(tables, tables_bboxes))
+    sorted_items = sorted(tables_with_bboxes, key=cmp_to_key(sort_tables))
+    sorted_tables = list(map(lambda x: x[0], sorted_items))
+    sorted_bboxes = list(map(lambda x: x[1], sorted_items))
+
+    # Get the bounding boxes of the tables on the page.
+    bboxes = [table.bbox for table in sorted_bboxes]
+
+    def not_within_bboxes(obj):
+        def obj_in_bbox(_bbox):
+            v_mid = (obj["top"] + obj["bottom"]) / 2
+            h_mid = (obj["x0"] + obj["x1"]) / 2
+            x0, top, x1, bottom = _bbox
+            return (h_mid >= x0) and (h_mid < x1) and (v_mid >= top) and (v_mid < bottom)
+        return not any(obj_in_bbox(__bbox) for __bbox in bboxes)
+
+    text_outside_tables = p.filter(not_within_bboxes).extract_text(use_text_flow=True, x_tolerance=3).split('\n')
+
+    return sorted_tables, text_outside_tables, bboxes
+    
+def extract_text(pdf, page):
+    p = pdf.pages[page]
+    text = p.extract_text(use_text_flow=True, x_tolerance=3)
 
     return text
 
 def get_table_indexes(full_text, text_without_tables):
-    # pp.pprint(full_text)
-    # print('\n')
-    # pp.pprint(text_without_tables)
     missing_indices = []
     i = 0
     j = 0
@@ -109,106 +142,94 @@ def get_table_indexes(full_text, text_without_tables):
 
     return missing_indices
 
-def list_to_table(original_list):
+def list_to_table(list):
+    def count_cells(row):
+        count = 0
+        for cell in row:
+            if cell is not None:
+                count += 1
+
+        return count
 
     # Single column tables, treat as text
-    text_output = ''
-    if len(original_list[0]) == 1:
-        for row in original_list:
-            text_output += row[0].replace('\n', '<br>') + '\n'
-        return text_output
-
-    list = copy.deepcopy(original_list)
+    output = []
     
-    for row_index, row in enumerate(original_list):
-        for cell_index, cell in enumerate(row):
-            if (cell is None):
-                if row_index == 0 and cell_index == 0:
-                    list[row_index][cell_index] = ''
-                elif row_index == 0:
-                    list[row_index][cell_index] = row[cell_index - 1]
-                elif cell_index == 0:
-                    list[row_index][cell_index] = list[row_index - 1][cell_index]
-                else:
-                    left_cell = row[cell_index - 1]
-                    up_cell = list[row_index - 1][cell_index]
-                    # row merge, get from left
-                    if up_cell is None or left_cell[2] >= up_cell[2]:
-                        list[row_index][cell_index] = left_cell
-                    # column merge, get from above
-                    elif left_cell is None or up_cell[3] >= left_cell[3]:
-                        list[row_index][cell_index] = up_cell
-                    else:
-                        list[row_index][cell_index] = ''
+    for row_index, row in enumerate(list):
+        if count_cells(row) == 1:
+            output.append(format_for_text_line(row[0]))
+            continue
+            
+        elif count_cells(row) > 1 and row_index > 0 and count_cells(list[row_index - 1]) == 1:
+            output.append('------------------------')
 
-    seen = {}
-    headers = []
-    if len(set(list[0])) != len(list[0]):
-        for field in list[0]:
-            if field in seen:
-                headers.append(field + ' ')
-                seen[field + ' '] = True
-            else:
-                headers.append(field)
-                seen[field] = True
-    else:
-        headers = list[0]
+        if any(cell.strip() != '' for cell in list[row_index]):
+            output.append(format_for_text_line((' | ').join(list[row_index]).replace('\n','<br>')))
 
-    pt = PrettyTable()
-    pt.field_names = headers
-    pt.add_rows(list[1:None])
+    return ('\n').join(output)
 
-    return str(pt)
+def table_is_consecutive(bboxes, table_num):
+    return abs(bboxes[table_num][0] - bboxes[table_num-1][0]) < 5 and bboxes[table_num][1] - bboxes[table_num-1][3] < 20
 
+def format_for_text_line(line):
+    return line.replace(' .','.').replace('(cid:129)', '•')
 
+def main():
+    directory = "input_files"  # Replace with the directory containing your PDF files
+    output_directory = "output_files"  # Replace with the directory where you want to save the TXT files
 
-page_number = 1
-pdf_path = 'files/ldAK6023.pdf'  # Replace 'example.pdf' with the path to your PDF file
-page_text_by_column = extract_text(pdf_path, page_number).split('\n')
-page_tables, page_text_without_tables, word_positions, table_positions = extract_tables(pdf_path, page_number)
+    if not os.path.exists(output_directory):
+        os.makedirs(output_directory)
 
-try:
-    page_number_test = int(page_text_by_column[0])
-    ## if the page starts with page number ( if not, next line will throw )
-    page_number_test + 1
-    text_lines = page_text_by_column[1:None]
-    text_lines_without_tables = page_text_without_tables[1:None]
-except:
-    text_lines = page_text_by_column
-    text_lines_without_tables = page_text_without_tables
+    for filename in os.listdir(directory):
+        # try:
+        if filename.endswith(".pdf"):
+            pdf_path = os.path.join(directory, filename)
 
-table_indexes = get_table_indexes(text_lines, text_lines_without_tables)
+            with pdfplumber.open(pdf_path) as pdf:
+                for page_number in range(len(pdf.pages)):
+                    print(f'parsing page {page_number} of {pdf_path}')
+                    page_text_by_column = extract_text(pdf, page_number).split('\n')
+                    page_tables, page_text_without_tables, table_bboxes = extract_tables(pdf, page_number)
 
-pp.pprint(table_indexes)
+                    try:
+                        page_number_test = int(page_text_by_column[0])
+                        ## if the page starts with page number ( if not, next line will throw )
+                        page_number_test + 1
+                        text_lines = page_text_by_column[1:None]
+                        text_lines_without_tables = page_text_without_tables[1:None]
+                    except:
+                        text_lines = page_text_by_column
+                        text_lines_without_tables = page_text_without_tables
 
-with open('output.txt', 'w') as file:
-    table_num = 0
-    for i, line in enumerate(text_lines_without_tables):
-        # print(page_tables[table_num])
-        if (i in table_indexes):
-            file.write(list_to_table(page_tables[table_num]))
-            file.write('\n')
-            table_num += 1
-        else:
-            file.write(line + '\n')
-    
-    while table_num < len(page_tables):
-        file.write(list_to_table(page_tables[table_num]))
-        file.write('\n')
-        table_num += 1
+                    table_indexes = get_table_indexes(text_lines, text_lines_without_tables)
 
+                    txt_path = os.path.join(output_directory, os.path.splitext(filename)[0] + '-page' + str(page_number + 1) + ".txt")
+                    with open(txt_path, 'w', encoding='utf-8') as file:
+                        table_num = 0
+                        for i, line in enumerate(text_lines_without_tables):
+                            # insert formatted table into correct location
+                            if (i in table_indexes):
+                                file.write(list_to_table(page_tables[table_num]))
+                                file.write('\n')
+                                table_num += 1
+                                while table_num < len(page_tables) and table_is_consecutive(table_bboxes, table_num):
+                                    file.write('------------------------\n')
+                                    file.write(list_to_table(page_tables[table_num]))
+                                    file.write('\n')
+                                    table_num += 1
 
+                            file.write(format_for_text_line(line) + '\n')
+                        
+                        while table_num < len(page_tables):
+                            file.write(list_to_table(page_tables[table_num]))
+                            file.write('\n')
+                            table_num += 1
+        # except:
+        #     print(f'SCRAPE FAILED ON FILE: {filename}')
+        #     continue
+
+if __name__ == "__main__":
+    main()
 
 
-# pp.pprint(text_order)
 
-# pp.pprint('\n\n')
-# pp.pprint('table_positions')
-# pp.pprint(table_positions)
-# pp.pprint('\n\n')
-# pp.pprint('word_positions')
-# pp.pprint(word_positions)
-# pp.pprint('\n\n')
-# pp.pprint('page_tables')
-# pp.pprint(page_tables)
-# pp.pprint('\n\n')
