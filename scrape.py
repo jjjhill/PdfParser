@@ -28,12 +28,12 @@ def extract_tables(pdf, page):
     p = pdf.pages[page]
 
     table_settings = {
-        "vertical_strategy": "lines",
-        "horizontal_strategy": "lines",
-        # "explicit_vertical_lines": curves_to_edges(p.curves + p.edges),
-        # "explicit_horizontal_lines": curves_to_edges(p.curves + p.edges),
-        "intersection_y_tolerance": 2,
+        "explicit_vertical_lines": curves_to_edges(p.curves + p.edges),
+        "explicit_horizontal_lines": curves_to_edges(p.curves + p.edges),
+        "intersection_y_tolerance": 3,
         "snap_y_tolerance": 5,
+        "text_vertical_ttb": False,
+        "min_columns": 2,
     }
     
     img = p.to_image(resolution=400)
@@ -181,52 +181,53 @@ def main():
         os.makedirs(output_directory)
 
     for filename in os.listdir(directory):
-        # try:
-        if filename.endswith(".pdf"):
-            pdf_path = os.path.join(directory, filename)
+        try:
+            if filename.endswith(".pdf"):
+                pdf_path = os.path.join(directory, filename)
 
-            with pdfplumber.open(pdf_path) as pdf:
-                for page_number in range(len(pdf.pages)):
-                    print(f'parsing page {page_number} of {pdf_path}')
-                    page_text_by_column = extract_text(pdf, page_number).split('\n')
-                    page_tables, page_text_without_tables, table_bboxes = extract_tables(pdf, page_number)
+                with pdfplumber.open(pdf_path) as pdf:
+                    for page_number in range(len(pdf.pages)):
+                        print(f'parsing page {page_number} of {pdf_path}')
+                        page_text_by_column = extract_text(pdf, page_number).split('\n')
+                        page_tables, page_text_without_tables, table_bboxes = extract_tables(pdf, page_number)
 
-                    try:
-                        page_number_test = int(page_text_by_column[0])
-                        ## if the page starts with page number ( if not, next line will throw )
-                        page_number_test + 1
-                        text_lines = page_text_by_column[1:None]
-                        text_lines_without_tables = page_text_without_tables[1:None]
-                    except:
-                        text_lines = page_text_by_column
-                        text_lines_without_tables = page_text_without_tables
+                        try:
+                            page_number_test = int(page_text_by_column[0])
+                            ## if the page starts with page number ( if not, next line will throw )
+                            page_number_test + 1
+                            text_lines = page_text_by_column[1:None]
+                            text_lines_without_tables = page_text_without_tables[1:None]
+                        except:
+                            text_lines = page_text_by_column
+                            text_lines_without_tables = page_text_without_tables
 
-                    table_indexes = get_table_indexes(text_lines, text_lines_without_tables)
+                        table_indexes = get_table_indexes(text_lines, text_lines_without_tables)
 
-                    txt_path = os.path.join(output_directory, os.path.splitext(filename)[0] + '-page' + str(page_number + 1) + ".txt")
-                    with open(txt_path, 'w', encoding='utf-8') as file:
-                        table_num = 0
-                        for i, line in enumerate(text_lines_without_tables):
-                            # insert formatted table into correct location
-                            if (i in table_indexes):
-                                file.write(list_to_table(page_tables[table_num]))
-                                file.write('\n')
-                                table_num += 1
-                                while table_num < len(page_tables) and table_is_consecutive(table_bboxes, table_num):
-                                    file.write('------------------------\n')
+                        txt_path = os.path.join(output_directory, os.path.splitext(filename)[0] + '-page' + str(page_number + 1) + ".txt")
+                        with open(txt_path, 'w', encoding='utf-8') as file:
+                            table_num = 0
+                            for i, line in enumerate(text_lines_without_tables):
+                                # insert formatted table into correct location
+                                if (i in table_indexes):
                                     file.write(list_to_table(page_tables[table_num]))
                                     file.write('\n')
                                     table_num += 1
+                                    while table_num < len(page_tables) and table_is_consecutive(table_bboxes, table_num):
+                                        file.write('------------------------\n')
+                                        file.write(list_to_table(page_tables[table_num]))
+                                        file.write('\n')
+                                        table_num += 1
 
-                            file.write(format_for_text_line(line) + '\n')
-                        
-                        while table_num < len(page_tables):
-                            file.write(list_to_table(page_tables[table_num]))
-                            file.write('\n')
-                            table_num += 1
-        # except:
-        #     print(f'SCRAPE FAILED ON FILE: {filename}')
-        #     continue
+                                file.write(format_for_text_line(line) + '\n')
+                            
+                            while table_num < len(page_tables):
+                                file.write(list_to_table(page_tables[table_num]))
+                                file.write('\n')
+                                table_num += 1
+        except Exception as error:
+            print(f'SCRAPE FAILED ON FILE: {filename}')
+            print(error)
+            continue
 
 if __name__ == "__main__":
     main()
