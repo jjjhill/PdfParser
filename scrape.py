@@ -3,6 +3,7 @@ import pprint
 from operator import itemgetter
 from functools import cmp_to_key
 import os
+import traceback
 
 pp = pprint.PrettyPrinter(indent=4)
 
@@ -113,8 +114,8 @@ def extract_tables(pdf, page):
         return not any(obj_in_bbox(__bbox) for __bbox in bboxes)
 
     text_outside_tables = p.filter(not_within_bboxes).extract_text(use_text_flow=True, x_tolerance=3).split('\n')
-
-    return sorted_tables, text_outside_tables, bboxes
+    text_outside_tables_boxes = p.filter(not_within_bboxes).extract_words(use_text_flow=True, x_tolerance=3)
+    return sorted_tables, text_outside_tables, bboxes, text_outside_tables_boxes
     
 def extract_text(pdf, page):
     p = pdf.pages[page]
@@ -167,15 +168,41 @@ def list_to_table(list):
 
     return ('\n').join(output)
 
-def table_is_consecutive(bboxes, table_num):
-    return abs(bboxes[table_num][0] - bboxes[table_num-1][0]) < 5 and bboxes[table_num][1] - bboxes[table_num-1][3] < 20
+def table_is_consecutive(bboxes, table_num, text_bboxes_outside_tables):
+    # check if theres any text between the table and the previous table
+    for word in text_bboxes_outside_tables:
+        # text = word['text']
+        x0 = word['x0']
+        y0 = word['top']
+        curr_table_x0 = bboxes[table_num][0]
+        curr_table_x1 = bboxes[table_num][2]
+        prev_table_x0 = bboxes[table_num-1][0]
+        prev_table_x1 = bboxes[table_num-1][2]
+        curr_table_y0 = bboxes[table_num][1]
+        prev_table_y1 = bboxes[table_num-1][3]
+
+        if y0 > prev_table_y1 and y0 < curr_table_y0:
+            # Word found between tables
+            if x0 >= curr_table_x0 and x0 <= curr_table_x1:
+                # its not on the other column in a 2 column page
+                return False
+            
+        if prev_table_y1 > curr_table_y0:
+            #new table on 2nd column
+            if y0 > prev_table_y1 and x0 >= prev_table_x0 and x0 <= prev_table_x1:
+                # text is after previous table and within same column as it
+                return False
+            
+    return True
+
+    return abs(bboxes[table_num][0] - bboxes[table_num-1][0]) < 5 and bboxes[table_num][1] - bboxes[table_num-1][3] < 15
 
 def format_for_text_line(line):
-    return line.replace(' .','.').replace('(cid:129)', '•')
+    return line.replace(' .','.').replace('(cid:129)', '•').replace('\ufffd', '.')
 
 def main():
-    directory = "input_files"  # Replace with the directory containing your PDF files
-    output_directory = "output_files"  # Replace with the directory where you want to save the TXT files
+    directory = "test_input_files/current/" 
+    output_directory = "output_files"
 
     if not os.path.exists(output_directory):
         os.makedirs(output_directory)
@@ -189,7 +216,7 @@ def main():
                     for page_number in range(len(pdf.pages)):
                         print(f'parsing page {page_number} of {pdf_path}')
                         page_text_by_column = extract_text(pdf, page_number).split('\n')
-                        page_tables, page_text_without_tables, table_bboxes = extract_tables(pdf, page_number)
+                        page_tables, page_text_without_tables, table_bboxes, text_outside_tables_boxes = extract_tables(pdf, page_number)
 
                         try:
                             page_number_test = int(page_text_by_column[0])
@@ -202,17 +229,16 @@ def main():
                             text_lines_without_tables = page_text_without_tables
 
                         table_indexes = get_table_indexes(text_lines, text_lines_without_tables)
-
                         txt_path = os.path.join(output_directory, os.path.splitext(filename)[0] + '-page' + str(page_number + 1) + ".txt")
                         with open(txt_path, 'w', encoding='utf-8') as file:
                             table_num = 0
                             for i, line in enumerate(text_lines_without_tables):
                                 # insert formatted table into correct location
-                                if (i in table_indexes):
+                                if i in table_indexes:
                                     file.write(list_to_table(page_tables[table_num]))
                                     file.write('\n')
                                     table_num += 1
-                                    while table_num < len(page_tables) and table_is_consecutive(table_bboxes, table_num):
+                                    while table_num < len(page_tables) and table_is_consecutive(table_bboxes, table_num, text_outside_tables_boxes):
                                         file.write('------------------------\n')
                                         file.write(list_to_table(page_tables[table_num]))
                                         file.write('\n')
@@ -227,6 +253,8 @@ def main():
         except Exception as error:
             print(f'SCRAPE FAILED ON FILE: {filename}')
             print(error)
+            traceback.print_exc()
+            
             continue
 
 if __name__ == "__main__":
