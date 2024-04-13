@@ -34,7 +34,7 @@ Yes parser works fine and we start using it, and found more problems on differen
 2. add parameters to parser and based on PDF source we can use different params for parser. For example corteva* -> one parser params, syngenta3 -> another parser params
 
 Here's list of problems:
-1. Problems with missing text. I think problem in text_lines_without_tables. is it possible to work only based on bboxes? For example in file corteva5-super-bad.pdf missing entire "Table 2" and content of result text file is very short. It's very dangerous and important to do not miss any data.
+1. Problems with missing text. I think problem in text_lines_without_tables. is it possible to work only based on bboxes? For example in file corteva5-super-bad.pdf missing entire "Table 2" and content of result text file is very short. *It's very dangerous and important to do not miss any data.*
 2. Problem in special symbols. For example in file corteva5-super-bad.pdf we have 0�018 instead of 0.018
 3. Tables with line borders. see file corteva8-table-without-borders.pdf
 4. Tables without borders. see file corteva6-wrong-positions. It's not big problem. if it's hard we can leave it as is
