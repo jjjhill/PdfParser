@@ -9,6 +9,17 @@ import json
 
 pp = pprint.PrettyPrinter(indent=4)
 
+# directory = "input_files" 
+directory = "test_input_files/current" 
+output_directory = "output_files"
+edges_directory = "table_edges"
+
+if not os.path.exists(output_directory):
+    os.makedirs(output_directory)
+if not os.path.exists(edges_directory):
+    os.makedirs(edges_directory)
+
+
 def curves_to_edges(cs):
     edges = []
 
@@ -91,24 +102,38 @@ def sort_tables(item1, item2):
     else:
         return x_diff
 
-def extract_tables(pdf, page):
+def extract_tables(pdf, page, explicit_lines=[]):
     p = pdf.pages[page]
-
-    table_settings = {
-        "explicit_vertical_lines": curves_to_edges(p.curves + p.edges),
-        "explicit_horizontal_lines": curves_to_edges(p.curves + p.edges),
-        "intersection_y_tolerance": 3,
-        "snap_y_tolerance": 5,
-        "text_vertical_ttb": False,
-        "min_columns": 2,
-    }
+    if explicit_lines and len(explicit_lines) > 1:
+        table_settings = {
+            # "vertical_strategy": "explicit",
+            # "horizontal_strategy": "explicit",
+            "explicit_vertical_lines": curves_to_edges(explicit_lines),
+            "explicit_horizontal_lines": curves_to_edges(explicit_lines),
+            "intersection_y_tolerance": 3,
+            "snap_y_tolerance": 5,
+            "text_vertical_ttb": False,
+            "min_columns": 2,
+        }
+    else:
+        table_settings = {
+            # "vertical_strategy": "explicit",
+            # "horizontal_strategy": "explicit",
+            "explicit_vertical_lines": curves_to_edges(p.curves + p.edges),
+            "explicit_horizontal_lines": curves_to_edges(p.curves + p.edges),
+            "intersection_y_tolerance": 3,
+            "snap_y_tolerance": 5,
+            "text_vertical_ttb": False,
+            "min_columns": 2,
+        }
     
-    # img = p.to_image(resolution=400)
-    # img.debug_tablefinder(table_settings)
-    # img.save('debug.png')
+    img = p.to_image(resolution=400)
+    img.debug_tablefinder(table_settings)
+    img.save('debug.png')
 
     tables = p.extract_tables(table_settings)
     tables_bboxes, edges = p.find_tables(table_settings)
+    print(len(tables))
     page_horiz_lines = get_horizontal_lines(p)
     # pp.pprint(page_horiz_lines)
 
@@ -132,7 +157,7 @@ def extract_tables(pdf, page):
     # img.draw_hline(318.4238)
     # img.save('debug.png')
 
-    if len(lines_outside_tables) > 0:
+    if len(tables) == 0 and len(lines_outside_tables) > 0:
         table_settings = {
             "vertical_strategy": "text_and_horizontal_line_vertices",
             "horizontal_strategy": "lines",
@@ -149,13 +174,8 @@ def extract_tables(pdf, page):
         #     p1 = p.crop((0, p.bbox[3]/2 - 150, p.bbox[2], p.bbox[3]/2+120))
         #     p = p.filter(lambda obj: not_within_bboxes(obj, map(lambda t: t.bbox, tables_bboxes)))
 
-        img = p.to_image(resolution=400)
-        img.debug_tablefinder(table_settings)
-        img.save('debug.png')
-
         tables = p.extract_tables(table_settings)
         tables_bboxes, edges = p.find_tables(table_settings)
-        pp.pprint(edges)
 
     elif len(lines_outside_tables) == 0:
         table_settings = {
@@ -227,7 +247,7 @@ def get_table_indexes(full_text, text_without_tables):
 
     return missing_indices
 
-def list_to_table(list):
+def list_to_text_file_table(list):
     def count_cells(row):
         count = 0
         for cell in row:
@@ -282,16 +302,56 @@ def table_is_consecutive(bboxes, table_num, text_bboxes_outside_tables):
 def format_for_text_line(line):
     return line.replace(' .','.').replace('(cid:129)', '•').replace('\ufffd', '.')
 
+def scrape_page(pdf, filename, page_number, new_lines=[]):
+    print(f'parsing page {page_number} of {pdf.path}')
+    page_text_by_column = extract_text(pdf, page_number).split('\n')
+    page_tables, page_text_without_tables, table_bboxes, text_outside_tables_boxes, edges = extract_tables(pdf, page_number)
+
+    try:
+        page_number_test = int(page_text_by_column[0])
+        ## if the page starts with page number ( if not, next line will throw )
+        page_number_test + 1
+        text_lines = page_text_by_column[1:None]
+        text_lines_without_tables = page_text_without_tables[1:None]
+    except:
+        text_lines = page_text_by_column
+        text_lines_without_tables = page_text_without_tables
+
+    table_indexes = get_table_indexes(text_lines, text_lines_without_tables)
+    txt_path = os.path.join(output_directory, os.path.splitext(filename)[0] + '-page' + str(page_number + 1) + ".txt")
+    print('tableidx')
+    print(table_indexes)
+    pp.pprint(page_tables)
+    with open(txt_path, 'w', encoding='utf-8') as file:
+        table_num = 0
+        for i, line in enumerate(text_lines_without_tables):
+            print(i)
+            print(line)
+            # insert formatted table into correct location
+            if i in table_indexes:
+                print('INSERT TABLE')
+                file.write(list_to_text_file_table(page_tables[table_num]))
+                file.write('\n')
+                table_num += 1
+                while table_num < len(page_tables) and table_is_consecutive(table_bboxes, table_num, text_outside_tables_boxes):
+                    file.write('------------------------\n')
+                    file.write(list_to_text_file_table(page_tables[table_num]))
+                    file.write('\n')
+                    table_num += 1
+
+            file.write(format_for_text_line(line) + '\n')
+        
+        while table_num < len(page_tables):
+            file.write(list_to_text_file_table(page_tables[table_num]))
+            file.write('\n')
+            table_num += 1
+
+    json_edges_path = os.path.join(edges_directory, os.path.splitext(filename)[0] + '-page' + str(page_number + 1) + ".json")
+    
+    with open(json_edges_path, 'w', encoding='utf-8') as file:
+        json.dump(edges, file, indent=4)
+
 def main():
-    directory = "test_input_files/current/" 
-    output_directory = "output_files"
-    edges_directory = "table_edges"
-
-    if not os.path.exists(output_directory):
-        os.makedirs(output_directory)
-    if not os.path.exists(edges_directory):
-        os.makedirs(edges_directory)
-
     for filename in os.listdir(directory):
         try:
             if filename.endswith(".pdf"):
@@ -299,46 +359,7 @@ def main():
 
                 with pdfplumber.open(pdf_path) as pdf:
                     for page_number in range(len(pdf.pages)):
-                        print(f'parsing page {page_number} of {pdf_path}')
-                        page_text_by_column = extract_text(pdf, page_number).split('\n')
-                        page_tables, page_text_without_tables, table_bboxes, text_outside_tables_boxes, edges = extract_tables(pdf, page_number)
-
-                        try:
-                            page_number_test = int(page_text_by_column[0])
-                            ## if the page starts with page number ( if not, next line will throw )
-                            page_number_test + 1
-                            text_lines = page_text_by_column[1:None]
-                            text_lines_without_tables = page_text_without_tables[1:None]
-                        except:
-                            text_lines = page_text_by_column
-                            text_lines_without_tables = page_text_without_tables
-
-                        table_indexes = get_table_indexes(text_lines, text_lines_without_tables)
-                        txt_path = os.path.join(output_directory, os.path.splitext(filename)[0] + '-page' + str(page_number + 1) + ".txt")
-                        with open(txt_path, 'w', encoding='utf-8') as file:
-                            table_num = 0
-                            for i, line in enumerate(text_lines_without_tables):
-                                # insert formatted table into correct location
-                                if i in table_indexes:
-                                    file.write(list_to_table(page_tables[table_num]))
-                                    file.write('\n')
-                                    table_num += 1
-                                    while table_num < len(page_tables) and table_is_consecutive(table_bboxes, table_num, text_outside_tables_boxes):
-                                        file.write('------------------------\n')
-                                        file.write(list_to_table(page_tables[table_num]))
-                                        file.write('\n')
-                                        table_num += 1
-
-                                file.write(format_for_text_line(line) + '\n')
-                            
-                            while table_num < len(page_tables):
-                                file.write(list_to_table(page_tables[table_num]))
-                                file.write('\n')
-                                table_num += 1
-
-                        json_edges_path = os.path.join(edges_directory, os.path.splitext(filename)[0] + '-page' + str(page_number + 1) + ".json")
-                        with open(json_edges_path, 'w', encoding='utf-8') as file:
-                            json.dump(edges, file, indent=4)
+                        scrape_page(pdf, filename, page_number)
 
         except Exception as error:
             print(f'SCRAPE FAILED ON FILE: {filename}')
