@@ -17,6 +17,7 @@ pp = pprint.PrettyPrinter(indent=4)
 
 directory = "to_correct/" 
 edges_directory = "table_edges"
+corrected_directory = "output_files/corrected"
 
 async def main():
     for filename in os.listdir(directory):
@@ -31,7 +32,8 @@ async def main():
                         # pp.pprint(initial_edges)
                         
                         new_lines = await edit(pdf, page_number, initial_edges)
-                        scrape_page(pdf, filename, page_number, new_lines)
+                        # print(len(new_lines))
+                        scrape_page(pdf, filename, page_number, new_lines, corrected_directory)
 
 
 asyncio.run(main())

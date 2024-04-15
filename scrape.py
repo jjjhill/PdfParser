@@ -5,17 +5,21 @@ from functools import cmp_to_key
 import os
 import traceback
 import json
+from pdfplumber.table import snap_edges
 
 
 pp = pprint.PrettyPrinter(indent=4)
 
 # directory = "input_files" 
-directory = "test_input_files/current" 
+directory = "test_input_files/demo" 
 output_directory = "output_files"
+corrected_directory = "output_files/corrected"
 edges_directory = "table_edges"
 
 if not os.path.exists(output_directory):
     os.makedirs(output_directory)
+if not os.path.exists(corrected_directory):
+    os.makedirs(corrected_directory)
 if not os.path.exists(edges_directory):
     os.makedirs(edges_directory)
 
@@ -76,11 +80,10 @@ def get_lines_outside_tables(page_horiz_lines, tables_bboxes):
     # pp.pprint(page_horiz_lines)
     # pp.pprint(tables_bboxes[0].bbox)
     outside_lines = []
-    
-    for table_bbox in tables_bboxes:
-        # lines = [obj for obj in page_horiz_lines if pdfplumber.utils.geometry.get_bbox_overlap(pdfplumber.utils.geometry.obj_to_bbox(obj), (36.125, 519.3003363636363, 301.320112, 589.4494769230768)) is None]
-        lines = [obj for obj in page_horiz_lines if pdfplumber.utils.geometry.get_bbox_overlap(pdfplumber.utils.geometry.obj_to_bbox(obj), extend_bbox(table_bbox.bbox, 1)) is None]
-        for line in lines:
+    pp.pprint(tables_bboxes)
+
+    for line in page_horiz_lines:
+        if all(pdfplumber.utils.geometry.get_bbox_overlap(pdfplumber.utils.geometry.obj_to_bbox(line), extend_bbox(table_bbox.bbox, 1)) is None for table_bbox in tables_bboxes):
             outside_lines.append(line)
 
     return outside_lines
@@ -103,15 +106,27 @@ def sort_tables(item1, item2):
         return x_diff
 
 def extract_tables(pdf, page, explicit_lines=[]):
+    # pp.pprint(explicit_lines)
     p = pdf.pages[page]
+    merged_edges = snap_edges(
+        explicit_lines,
+        x_tolerance=5,
+        y_tolerance=5,
+    )
+    # pp.pprint(list(filter(lambda edge: edge['orientation'] == 'v', merged_edges)))
+
     if explicit_lines and len(explicit_lines) > 1:
+        print('here')
         table_settings = {
-            # "vertical_strategy": "explicit",
-            # "horizontal_strategy": "explicit",
-            "explicit_vertical_lines": curves_to_edges(explicit_lines),
-            "explicit_horizontal_lines": curves_to_edges(explicit_lines),
-            "intersection_y_tolerance": 3,
-            "snap_y_tolerance": 5,
+            "vertical_strategy": "explicit",
+            "horizontal_strategy": "explicit",
+            "explicit_vertical_lines": merged_edges,
+            "explicit_horizontal_lines": merged_edges,
+            "intersection_x_tolerance": 12,
+            "intersection_y_tolerance": 8,
+            "join_y_tolerance": 5,
+            "snap_y_tolerance": 4,
+            "snap_x_tolerance": 4,
             "text_vertical_ttb": False,
             "min_columns": 2,
         }
@@ -128,6 +143,10 @@ def extract_tables(pdf, page, explicit_lines=[]):
         }
     
     img = p.to_image(resolution=400)
+    img.draw_lines(list(map(lambda line: ((line['x0'], line['top']), (line['x1'], line['bottom'])), merged_edges)), stroke_width=6)
+    img.save('lines.png')
+    
+    img = p.to_image(resolution=400)
     img.debug_tablefinder(table_settings)
     img.save('debug.png')
 
@@ -135,6 +154,7 @@ def extract_tables(pdf, page, explicit_lines=[]):
     tables_bboxes, edges = p.find_tables(table_settings)
     print(len(tables))
     page_horiz_lines = get_horizontal_lines(p)
+    print(f'len lines: {len(page_horiz_lines)}')
     # pp.pprint(page_horiz_lines)
 
     # img = p.to_image(resolution=400)
@@ -158,6 +178,7 @@ def extract_tables(pdf, page, explicit_lines=[]):
     # img.save('debug.png')
 
     if len(tables) == 0 and len(lines_outside_tables) > 0:
+        print('HERE')
         table_settings = {
             "vertical_strategy": "text_and_horizontal_line_vertices",
             "horizontal_strategy": "lines",
@@ -177,7 +198,8 @@ def extract_tables(pdf, page, explicit_lines=[]):
         tables = p.extract_tables(table_settings)
         tables_bboxes, edges = p.find_tables(table_settings)
 
-    elif len(lines_outside_tables) == 0:
+    elif len(tables) == 0 and len(lines_outside_tables) == 0:
+        print('THERE')
         table_settings = {
             "vertical_strategy": "text",
             "horizontal_strategy": "text",
@@ -186,9 +208,9 @@ def extract_tables(pdf, page, explicit_lines=[]):
         p1 = p.crop((0, 0, p.bbox[2]/2, p.bbox[3]))
         p2 = p.crop((p.bbox[2]/2, 0, p.bbox[2], p.bbox[3]))
     
-        img = p1.to_image(resolution=400)
-        img.debug_tablefinder(table_settings)
-        img.save('debug.png')
+        # img = p1.to_image(resolution=400)
+        # img.debug_tablefinder(table_settings)
+        # img.save('debug.png')
         
         p1tables = p1.extract_tables(table_settings)
         p2tables = p2.extract_tables(table_settings)
@@ -251,20 +273,22 @@ def list_to_text_file_table(list):
     def count_cells(row):
         count = 0
         for cell in row:
-            if cell is not None:
+            if cell is not None and cell.strip() != '':
                 count += 1
 
         return count
+    
+    def is_title_row(row):
+        return count_cells(row) == 1 and row[0] is not None and row[0].strip() != ''
 
     # Single column tables, treat as text
     output = []
     
     for row_index, row in enumerate(list):
-        if count_cells(row) == 1:
+        if is_title_row(row):
             output.append(format_for_text_line(row[0]))
-            continue
-            
-        elif count_cells(row) > 1 and row_index > 0 and count_cells(list[row_index - 1]) == 1:
+
+        elif row_index > 0 and is_title_row(list[row_index - 1]):
             output.append('------------------------')
 
         if any(cell.strip() != '' for cell in list[row_index]):
@@ -302,10 +326,12 @@ def table_is_consecutive(bboxes, table_num, text_bboxes_outside_tables):
 def format_for_text_line(line):
     return line.replace(' .','.').replace('(cid:129)', '•').replace('\ufffd', '.')
 
-def scrape_page(pdf, filename, page_number, new_lines=[]):
+def scrape_page(pdf, filename, page_number, new_lines=[], output_dir=output_directory):
     print(f'parsing page {page_number} of {pdf.path}')
+
+    print(f'after after: {len(new_lines)}')
     page_text_by_column = extract_text(pdf, page_number).split('\n')
-    page_tables, page_text_without_tables, table_bboxes, text_outside_tables_boxes, edges = extract_tables(pdf, page_number)
+    page_tables, page_text_without_tables, table_bboxes, text_outside_tables_boxes, edges = extract_tables(pdf, page_number, new_lines)
 
     try:
         page_number_test = int(page_text_by_column[0])
@@ -318,18 +344,19 @@ def scrape_page(pdf, filename, page_number, new_lines=[]):
         text_lines_without_tables = page_text_without_tables
 
     table_indexes = get_table_indexes(text_lines, text_lines_without_tables)
-    txt_path = os.path.join(output_directory, os.path.splitext(filename)[0] + '-page' + str(page_number + 1) + ".txt")
+    txt_path = os.path.join(output_dir, os.path.splitext(filename)[0] + '-page' + str(page_number + 1) + ".txt")
     print('tableidx')
     print(table_indexes)
-    pp.pprint(page_tables)
+
+    # pp.pprint(page_tables[-1])
     with open(txt_path, 'w', encoding='utf-8') as file:
         table_num = 0
         for i, line in enumerate(text_lines_without_tables):
-            print(i)
-            print(line)
+            # print(i)
+            # print(line)
             # insert formatted table into correct location
             if i in table_indexes:
-                print('INSERT TABLE')
+                # print('INSERT TABLE')
                 file.write(list_to_text_file_table(page_tables[table_num]))
                 file.write('\n')
                 table_num += 1

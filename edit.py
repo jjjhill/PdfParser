@@ -49,14 +49,21 @@ def draw_initial_lines(canvas, initial_lines):
     segmented_initial_lines = vertical_lines + segmented_horizontal_lines
     # print(len(segmented_initial_lines))
     # Draw initial lines on the canvas
+    print(f'lines before: {len(segmented_initial_lines)}')
     for line in segmented_initial_lines:
         drawn_line = canvas.create_line(line['x0'], line['y0'], line['x1'], line['y1'], fill="red")
         lines.append(drawn_line)
     
 def run_tkinter_loop(pdf, page_number, initial_lines):
-    global current, lines, submit_pressed, result_queue
-    root = tk.Tk()
+    global current, lines, submit_pressed, result_queue, selected_line, deleted_lines, user_events
 
+    root = tk.Tk()
+    
+    current = None
+    lines = []
+    selected_line = None
+    deleted_lines = []
+    user_events = []
     # Convert PDF to image
     pdf_image = pdf_to_image(pdf.path, page_number)
     root.geometry(f'{pdf_image.width + 150}x{pdf_image.height}')
@@ -69,9 +76,33 @@ def run_tkinter_loop(pdf, page_number, initial_lines):
     canvas.create_image(0, 0, image=photo, anchor='nw')
     draw_initial_lines(canvas, initial_lines)
 
+    def map_coord_to_dict(coord): 
+        x0 = min([coord[0], coord[2]])
+        y0 = min([coord[1], coord[3]])
+        x1 = max([coord[0], coord[2]])
+        y1 = max([coord[1], coord[3]])
+        return {
+            'x0': x0,
+            'x1': x1,
+            "object_type": "curve_edge",
+            'top': y0,
+            "doctop": y0,
+            "bottom": y1,
+            "width": abs(x1 - x0),
+            "height": abs(y1 - y0),
+            "orientation": "v" if x1 == x0 else ("h" if y1 == y0 else None),
+        }
+
     def submit():
-        result_queue.put(lines)
+        min_line_length = 3
+        line_coords = list(
+            # filter(lambda line: not (line['orientation'] == 'h' and line['width'] < min_line_length) and not (line['orientation'] == 'v' and line['height'] < min_line_length),
+            map(map_coord_to_dict
+            ,map(lambda line: canvas.coords(line), lines)))
+        result_queue.put(line_coords)
         submit_pressed.set()
+        root.destroy()
+
 
     # Create a frame to hold the buttons
     button_frame = Frame(root)
@@ -109,6 +140,10 @@ async def edit(pdf, page_number, initial_lines):
     submit_pressed.clear()
     # Wait for the result from the queue
     new_lines = result_queue.get()
+    
+    print(f'lines after: {len(new_lines)}')
+    t.join()
+
     return new_lines
 
 
