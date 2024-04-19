@@ -1,0 +1,418 @@
+[
+    {
+        "x0": 45.0,
+        "y0": 757.8000000000001,
+        "x1": 567.0,
+        "y1": 757.8000000000001,
+        "width": 522.0,
+        "height": 0,
+        "pts": [
+            [
+                45.0,
+                757.8
+            ],
+            [
+                567.0,
+                757.8
+            ],
+            [
+                567.0,
+                34.19999999999993
+            ],
+            [
+                45.0,
+                34.19999999999993
+            ]
+        ],
+        "linewidth": 0,
+        "stroke": false,
+        "fill": true,
+        "evenodd": false,
+        "stroking_color": null,
+        "non_stroking_color": [
+            0,
+            0,
+            0,
+            0
+        ],
+        "mcid": null,
+        "tag": null,
+        "object_type": "rect_edge",
+        "page_number": 1,
+        "stroking_pattern": null,
+        "non_stroking_pattern": null,
+        "top": 34.19999999999993,
+        "bottom": 34.19999999999993,
+        "doctop": 34.19999999999993,
+        "orientation": "h"
+    },
+    {
+        "x0": 45.0,
+        "y0": 435.845,
+        "x1": 117.514,
+        "y1": 435.845,
+        "width": 72.514,
+        "height": 0.0,
+        "pts": [
+            [
+                45.0,
+                356.155
+            ],
+            [
+                117.514,
+                356.155
+            ]
+        ],
+        "linewidth": 1,
+        "stroke": true,
+        "fill": false,
+        "evenodd": false,
+        "stroking_color": [
+            1
+        ],
+        "non_stroking_color": [
+            1
+        ],
+        "mcid": null,
+        "tag": null,
+        "object_type": "line",
+        "page_number": 1,
+        "stroking_pattern": null,
+        "non_stroking_pattern": null,
+        "top": 356.155,
+        "bottom": 356.155,
+        "doctop": 356.155,
+        "orientation": "h"
+    },
+    {
+        "x0": 146.51999999999998,
+        "y0": 435.845,
+        "x1": 219.034,
+        "y1": 435.845,
+        "width": 72.51400000000001,
+        "height": 0.0,
+        "pts": [
+            [
+                146.51999999999998,
+                356.155
+            ],
+            [
+                219.034,
+                356.155
+            ]
+        ],
+        "linewidth": 1,
+        "stroke": true,
+        "fill": false,
+        "evenodd": false,
+        "stroking_color": [
+            1
+        ],
+        "non_stroking_color": [
+            1
+        ],
+        "mcid": null,
+        "tag": null,
+        "object_type": "line",
+        "page_number": 1,
+        "stroking_pattern": null,
+        "non_stroking_pattern": null,
+        "top": 356.155,
+        "bottom": 356.155,
+        "doctop": 356.155,
+        "orientation": "h"
+    },
+    {
+        "x0": 248.03999999999996,
+        "y0": 435.845,
+        "x1": 298.79999999999995,
+        "y1": 435.845,
+        "width": 50.75999999999999,
+        "height": 0.0,
+        "pts": [
+            [
+                248.03999999999996,
+                356.155
+            ],
+            [
+                298.79999999999995,
+                356.155
+            ]
+        ],
+        "linewidth": 1,
+        "stroke": true,
+        "fill": false,
+        "evenodd": false,
+        "stroking_color": [
+            1
+        ],
+        "non_stroking_color": [
+            1
+        ],
+        "mcid": null,
+        "tag": null,
+        "object_type": "line",
+        "page_number": 1,
+        "stroking_pattern": null,
+        "non_stroking_pattern": null,
+        "top": 356.155,
+        "bottom": 356.155,
+        "doctop": 356.155,
+        "orientation": "h"
+    },
+    {
+        "x0": 45.0,
+        "y0": 249.917,
+        "x1": 124.629,
+        "y1": 249.917,
+        "width": 79.629,
+        "height": 0.0,
+        "pts": [
+            [
+                45.0,
+                542.083
+            ],
+            [
+                124.629,
+                542.083
+            ]
+        ],
+        "linewidth": 1,
+        "stroke": true,
+        "fill": false,
+        "evenodd": false,
+        "stroking_color": [
+            1
+        ],
+        "non_stroking_color": [
+            1
+        ],
+        "mcid": null,
+        "tag": null,
+        "object_type": "line",
+        "page_number": 1,
+        "stroking_pattern": null,
+        "non_stroking_pattern": null,
+        "top": 542.083,
+        "bottom": 542.083,
+        "doctop": 542.083,
+        "orientation": "h"
+    },
+    {
+        "x0": 153.80200000000002,
+        "y0": 249.917,
+        "x1": 218.954,
+        "y1": 249.917,
+        "width": 65.15199999999999,
+        "height": 0.0,
+        "pts": [
+            [
+                153.80200000000002,
+                542.083
+            ],
+            [
+                218.954,
+                542.083
+            ]
+        ],
+        "linewidth": 1,
+        "stroke": true,
+        "fill": false,
+        "evenodd": false,
+        "stroking_color": [
+            1
+        ],
+        "non_stroking_color": [
+            1
+        ],
+        "mcid": null,
+        "tag": null,
+        "object_type": "line",
+        "page_number": 1,
+        "stroking_pattern": null,
+        "non_stroking_pattern": null,
+        "top": 542.083,
+        "bottom": 542.083,
+        "doctop": 542.083,
+        "orientation": "h"
+    },
+    {
+        "x0": 248.127,
+        "y0": 249.917,
+        "x1": 298.8,
+        "y1": 249.917,
+        "width": 50.673,
+        "height": 0.0,
+        "pts": [
+            [
+                248.127,
+                542.083
+            ],
+            [
+                298.8,
+                542.083
+            ]
+        ],
+        "linewidth": 1,
+        "stroke": true,
+        "fill": false,
+        "evenodd": false,
+        "stroking_color": [
+            1
+        ],
+        "non_stroking_color": [
+            1
+        ],
+        "mcid": null,
+        "tag": null,
+        "object_type": "line",
+        "page_number": 1,
+        "stroking_pattern": null,
+        "non_stroking_pattern": null,
+        "top": 542.083,
+        "bottom": 542.083,
+        "doctop": 542.083,
+        "orientation": "h"
+    },
+    {
+        "x0": 45.0,
+        "y0": 34.2,
+        "x1": 567.0,
+        "y1": 34.2,
+        "width": 522.0,
+        "height": 0,
+        "pts": [
+            [
+                45.0,
+                757.8
+            ],
+            [
+                567.0,
+                757.8
+            ],
+            [
+                567.0,
+                34.19999999999993
+            ],
+            [
+                45.0,
+                34.19999999999993
+            ]
+        ],
+        "linewidth": 0,
+        "stroke": false,
+        "fill": true,
+        "evenodd": false,
+        "stroking_color": null,
+        "non_stroking_color": [
+            0,
+            0,
+            0,
+            0
+        ],
+        "mcid": null,
+        "tag": null,
+        "object_type": "rect_edge",
+        "page_number": 1,
+        "stroking_pattern": null,
+        "non_stroking_pattern": null,
+        "top": 757.8,
+        "bottom": 757.8,
+        "doctop": 757.8,
+        "orientation": "h"
+    },
+    {
+        "x0": 45.0,
+        "y0": 34.2,
+        "x1": 45.0,
+        "y1": 757.8000000000001,
+        "width": 0,
+        "height": 723.6,
+        "pts": [
+            [
+                45.0,
+                757.8
+            ],
+            [
+                567.0,
+                757.8
+            ],
+            [
+                567.0,
+                34.19999999999993
+            ],
+            [
+                45.0,
+                34.19999999999993
+            ]
+        ],
+        "linewidth": 0,
+        "stroke": false,
+        "fill": true,
+        "evenodd": false,
+        "stroking_color": null,
+        "non_stroking_color": [
+            0,
+            0,
+            0,
+            0
+        ],
+        "mcid": null,
+        "tag": null,
+        "object_type": "rect_edge",
+        "page_number": 1,
+        "stroking_pattern": null,
+        "non_stroking_pattern": null,
+        "top": 34.19999999999993,
+        "bottom": 757.8,
+        "doctop": 34.19999999999993,
+        "orientation": "v"
+    },
+    {
+        "x0": 567.0,
+        "y0": 34.2,
+        "x1": 567.0,
+        "y1": 757.8000000000001,
+        "width": 0,
+        "height": 723.6,
+        "pts": [
+            [
+                45.0,
+                757.8
+            ],
+            [
+                567.0,
+                757.8
+            ],
+            [
+                567.0,
+                34.19999999999993
+            ],
+            [
+                45.0,
+                34.19999999999993
+            ]
+        ],
+        "linewidth": 0,
+        "stroke": false,
+        "fill": true,
+        "evenodd": false,
+        "stroking_color": null,
+        "non_stroking_color": [
+            0,
+            0,
+            0,
+            0
+        ],
+        "mcid": null,
+        "tag": null,
+        "object_type": "rect_edge",
+        "page_number": 1,
+        "stroking_pattern": null,
+        "non_stroking_pattern": null,
+        "top": 34.19999999999993,
+        "bottom": 757.8,
+        "doctop": 34.19999999999993,
+        "orientation": "v"
+    }
+]
