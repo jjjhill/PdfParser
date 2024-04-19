@@ -10,7 +10,7 @@ from pdfplumber.table import snap_edges
 pp = pprint.PrettyPrinter(indent=4)
 
 # directory = "input_files" 
-directory = "test_input_files/current" 
+directory = "test_input_files/current/current" 
 output_directory = "output_files"
 corrected_directory = "output_files/corrected"
 edges_directory = "table_edges"
@@ -56,21 +56,33 @@ def get_horizontal_lines(page):
 def extend_bbox(bbox, value):
     return (bbox[0] - value, bbox[1] - value, bbox[2] + value, bbox[3] + value)
 
-def contains_consecutive_horizontal_lines(lines, count):
-    consecutive = 1
-    prev_y_diff = None
-    for i, line in enumerate(lines):
-        if i == 0:
-            continue
-        y_diff = lines[i-1][1] - line[1]
-        if y_diff < 50 and (prev_y_diff is None or abs(y_diff - prev_y_diff) < 1):
-            consecutive += 1
+
+def contains_consecutive_horizontal_lines(line_clusters_by_x0, count):
+    print(len(line_clusters_by_x0))
+    for j, cluster in enumerate(line_clusters_by_x0):
+        consecutive = 1
+        prev_y_diff = None
+        prev_width = None
+        for i, line in enumerate(cluster):
+            if i == 0:
+                continue
+            print('prev')
+            pp.pprint(cluster[i-1]['top'])
+            pp.pprint(line['top'])
+            y_diff = float(abs(cluster[i-1]['top'] - line['top']))
+            if y_diff < 50 and y_diff > 6 and (prev_y_diff is None or abs(y_diff - prev_y_diff) < 3):
+                consecutive += 1
+            else:
+                consecutive = 1
             prev_y_diff = y_diff
-        else:
-            consecutive = 1
-        if consecutive >= count:
-            # print(f'At least {count} consecutive lines')
-            return True
+
+            if prev_width is not None and abs(line['width'] - prev_width) > 6:
+                consecutive = 1
+
+            prev_width = line['width']
+            if consecutive >= count:
+                print(f'At least {count} consecutive lines')
+                return True
     
     # print('no consecutive lines')
     return False
@@ -102,8 +114,22 @@ def sort_tables(item1, item2):
         return y_diff
     else:
         return x_diff
+    
+    
+# this does not yet account for tables with no lines
+def predict_open_table_exists(lines_outside_tables):
+    by_top = pdfplumber.utils.clustering.cluster_objects(lines_outside_tables, itemgetter('top'), 3)
+    merged_lines = []
+    for cluster in by_top:
+        lines_in_row = pdfplumber.utils.geometry.merge_edges(cluster)
+        merged_lines = merged_lines + lines_in_row
+    
+    by_x0 = pdfplumber.utils.clustering.cluster_objects(merged_lines, itemgetter('x0'), 5)
+    
+    return contains_consecutive_horizontal_lines(by_x0, 3)
+   
 
-def extract_tables(pdf, page, explicit_lines=[]):
+def extract_tables(pdf, page, explicit_lines=[], write_edges=None):
     # pp.pprint(explicit_lines)
     p = pdf.pages[page]
     merged_edges = snap_edges(
@@ -131,13 +157,14 @@ def extract_tables(pdf, page, explicit_lines=[]):
         table_settings = {
             # "vertical_strategy": "explicit",
             # "horizontal_strategy": "explicit",
-            "explicit_vertical_lines": curves_to_edges(p.curves + p.edges),
-            "explicit_horizontal_lines": curves_to_edges(p.curves + p.edges),
+            "explicit_vertical_lines": p.edges,
+            "explicit_horizontal_lines": p.edges,
             "intersection_y_tolerance": 3,
             "snap_y_tolerance": 5,
             "text_vertical_ttb": False,
             "min_columns": 2,
         }
+    print('table strategy 1 used')
     
     img = p.to_image(resolution=400)
     img.draw_lines(list(map(lambda line: ((line['x0'], line['top']), (line['x1'], line['bottom'])), merged_edges)), stroke_width=6)
@@ -172,28 +199,17 @@ def extract_tables(pdf, page, explicit_lines=[]):
     # img.draw_hline(318.4238)
     # img.save('debug.png')
 
-    # this does not yet account for tables with no lines
-    def predict_open_table_exists(lines_outside_tables):
-        # pp.pprint(lines_outside_tables)
-        by_y0 = pdfplumber.utils.clustering.cluster_objects(lines_outside_tables, itemgetter('top'), 5)
-        print('here')
-        pp.pprint(by_y0)
-        for index, line_cluster in enumerate(by_y0, 1):
-            # pp.pprint(line_cluster)
-            line = line_cluster[0]
-            #check if 3 lines are within 50 pixels of eachother
-            # pp.pprint(line_cluster)
-            if abs(line['top'] - by_y0[index-2][0]['top']) < 30:
-                return True
-            
-        return False
+    if len(tables) > 0:
+        if write_edges is not None:
+            write_edges(edges)
 
-    if len(tables) == 0 and predict_open_table_exists(lines_outside_tables):
+    elif len(tables) == 0 and predict_open_table_exists(lines_outside_tables):
         table_settings = {
             "vertical_strategy": "text_and_horizontal_line_vertices",
             "horizontal_strategy": "lines",
             "min_words_vertical": 5,
         }
+        print('table strategy 2 used')
         # p1 = p.crop((0, 0, p.bbox[2]/2, p.bbox[3]))
         # p2 = p.crop((p.bbox[2]/2, 0, p.bbox[2], p.bbox[3]))
 
@@ -207,6 +223,8 @@ def extract_tables(pdf, page, explicit_lines=[]):
 
         tables = p.extract_tables(table_settings)
         tables_bboxes, edges = p.find_tables(table_settings)
+        if write_edges is not None:
+            write_edges(edges)
 
     elif len(tables) == 0 and not predict_open_table_exists(lines_outside_tables):
         table_settings = {
@@ -214,16 +232,17 @@ def extract_tables(pdf, page, explicit_lines=[]):
             "horizontal_strategy": "text",
             "min_words_vertical": 7,
         }
+        print('table strategy 3 used to extract possible edges')
         # p1 = p.crop((0, 0, p.bbox[2]/2, p.bbox[3]))
         # p2 = p.crop((p.bbox[2]/2, 0, p.bbox[2], p.bbox[3]))
     
-        img = p.to_image(resolution=400)
-        img.debug_tablefinder(table_settings)
-        img.save('debug1.png')
+        # img = p.to_image(resolution=400)
+        # img.debug_tablefinder(table_settings)
+        # img.save('debug1.png')
         
-        tables = p.extract_tables(table_settings)
-        tables_bboxes, edges = p.find_tables(table_settings)
-
+        possible_tables_bboxes, possible_edges = p.find_tables(table_settings)
+        if write_edges is not None:
+            write_edges(possible_edges)
         # p1tables = p1.extract_tables(table_settings)
         # p2tables = p2.extract_tables(table_settings)
         # tables = p1tables + p2tables
@@ -242,7 +261,7 @@ def extract_tables(pdf, page, explicit_lines=[]):
         # }]
         # edges = edges1 + edges2
     
-
+    print(len(tables))
     tables_with_bboxes = tuple(zip(tables, tables_bboxes))
     sorted_items = sorted(tables_with_bboxes, key=cmp_to_key(sort_tables))
     sorted_tables = list(map(lambda x: x[0], sorted_items))
@@ -338,11 +357,17 @@ def table_is_consecutive(bboxes, table_num, text_bboxes_outside_tables):
 def format_for_text_line(line):
     return line.replace(' .','.').replace('(cid:129)', '•').replace('\ufffd', '.')
 
+def write_edges(json_edges_path, edges):
+    with open(json_edges_path, 'w', encoding='utf-8') as file:
+        json.dump(edges, file, indent=4)
+
 def scrape_page(pdf, filename, page_number, new_lines=[], output_dir=output_directory):
     print(f'parsing page {page_number} of {pdf.path}')
 
+    json_edges_path = os.path.join(edges_directory, os.path.splitext(filename)[0] + '-page' + str(page_number + 1) + ".json")
+
     page_text_by_column = extract_text(pdf, page_number).split('\n')
-    page_tables, page_text_without_tables, table_bboxes, text_outside_tables_boxes, edges = extract_tables(pdf, page_number, new_lines)
+    page_tables, page_text_without_tables, table_bboxes, text_outside_tables_boxes, edges = extract_tables(pdf, page_number, new_lines, lambda edges: write_edges(json_edges_path, edges))
 
     try:
         page_number_test = int(page_text_by_column[0])
@@ -384,10 +409,7 @@ def scrape_page(pdf, filename, page_number, new_lines=[], output_dir=output_dire
             file.write('\n')
             table_num += 1
 
-    json_edges_path = os.path.join(edges_directory, os.path.splitext(filename)[0] + '-page' + str(page_number + 1) + ".json")
-    
-    with open(json_edges_path, 'w', encoding='utf-8') as file:
-        json.dump(edges, file, indent=4)
+    # write_edges(json_edges_path, edges)
 
 def main():
     for filename in os.listdir(directory):
