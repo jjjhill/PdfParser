@@ -7,11 +7,10 @@ import traceback
 import json
 from pdfplumber.table import snap_edges
 
-
 pp = pprint.PrettyPrinter(indent=4)
 
 # directory = "input_files" 
-directory = "test_input_files/demo" 
+directory = "test_input_files/current" 
 output_directory = "output_files"
 corrected_directory = "output_files/corrected"
 edges_directory = "table_edges"
@@ -80,7 +79,6 @@ def get_lines_outside_tables(page_horiz_lines, tables_bboxes):
     # pp.pprint(page_horiz_lines)
     # pp.pprint(tables_bboxes[0].bbox)
     outside_lines = []
-    pp.pprint(tables_bboxes)
 
     for line in page_horiz_lines:
         if all(pdfplumber.utils.geometry.get_bbox_overlap(pdfplumber.utils.geometry.obj_to_bbox(line), extend_bbox(table_bbox.bbox, 1)) is None for table_bbox in tables_bboxes):
@@ -116,7 +114,6 @@ def extract_tables(pdf, page, explicit_lines=[]):
     # pp.pprint(list(filter(lambda edge: edge['orientation'] == 'v', merged_edges)))
 
     if explicit_lines and len(explicit_lines) > 1:
-        print('here')
         table_settings = {
             "vertical_strategy": "explicit",
             "horizontal_strategy": "explicit",
@@ -152,9 +149,7 @@ def extract_tables(pdf, page, explicit_lines=[]):
 
     tables = p.extract_tables(table_settings)
     tables_bboxes, edges = p.find_tables(table_settings)
-    print(len(tables))
     page_horiz_lines = get_horizontal_lines(p)
-    print(f'len lines: {len(page_horiz_lines)}')
     # pp.pprint(page_horiz_lines)
 
     # img = p.to_image(resolution=400)
@@ -177,8 +172,23 @@ def extract_tables(pdf, page, explicit_lines=[]):
     # img.draw_hline(318.4238)
     # img.save('debug.png')
 
-    if len(tables) == 0 and len(lines_outside_tables) > 0:
-        print('HERE')
+    # this does not yet account for tables with no lines
+    def predict_open_table_exists(lines_outside_tables):
+        # pp.pprint(lines_outside_tables)
+        by_y0 = pdfplumber.utils.clustering.cluster_objects(lines_outside_tables, itemgetter('top'), 5)
+        print('here')
+        pp.pprint(by_y0)
+        for index, line_cluster in enumerate(by_y0, 1):
+            # pp.pprint(line_cluster)
+            line = line_cluster[0]
+            #check if 3 lines are within 50 pixels of eachother
+            # pp.pprint(line_cluster)
+            if abs(line['top'] - by_y0[index-2][0]['top']) < 30:
+                return True
+            
+        return False
+
+    if len(tables) == 0 and predict_open_table_exists(lines_outside_tables):
         table_settings = {
             "vertical_strategy": "text_and_horizontal_line_vertices",
             "horizontal_strategy": "lines",
@@ -187,9 +197,9 @@ def extract_tables(pdf, page, explicit_lines=[]):
         # p1 = p.crop((0, 0, p.bbox[2]/2, p.bbox[3]))
         # p2 = p.crop((p.bbox[2]/2, 0, p.bbox[2], p.bbox[3]))
 
-        # img = p.to_image(resolution=400)
-        # img.debug_tablefinder(table_settings)
-        # img.save('debug.png')
+        img = p.to_image(resolution=400)
+        img.debug_tablefinder(table_settings)
+        img.save('debug.png')
 
         # if len(lines_outside_tables) > 0:
         #     p1 = p.crop((0, p.bbox[3]/2 - 150, p.bbox[2], p.bbox[3]/2+120))
@@ -198,26 +208,28 @@ def extract_tables(pdf, page, explicit_lines=[]):
         tables = p.extract_tables(table_settings)
         tables_bboxes, edges = p.find_tables(table_settings)
 
-    elif len(tables) == 0 and len(lines_outside_tables) == 0:
-        print('THERE')
+    elif len(tables) == 0 and not predict_open_table_exists(lines_outside_tables):
         table_settings = {
             "vertical_strategy": "text",
             "horizontal_strategy": "text",
             "min_words_vertical": 7,
         }
-        p1 = p.crop((0, 0, p.bbox[2]/2, p.bbox[3]))
-        p2 = p.crop((p.bbox[2]/2, 0, p.bbox[2], p.bbox[3]))
+        # p1 = p.crop((0, 0, p.bbox[2]/2, p.bbox[3]))
+        # p2 = p.crop((p.bbox[2]/2, 0, p.bbox[2], p.bbox[3]))
     
-        # img = p1.to_image(resolution=400)
-        # img.debug_tablefinder(table_settings)
-        # img.save('debug.png')
+        img = p.to_image(resolution=400)
+        img.debug_tablefinder(table_settings)
+        img.save('debug1.png')
         
-        p1tables = p1.extract_tables(table_settings)
-        p2tables = p2.extract_tables(table_settings)
-        tables = p1tables + p2tables
-        tables1_bboxes, edges1 = p1.find_tables(table_settings)
-        tables2_bboxes, edges2 = p2.find_tables(table_settings)
-        tables_bboxes = tables1_bboxes + tables2_bboxes
+        tables = p.extract_tables(table_settings)
+        tables_bboxes, edges = p.find_tables(table_settings)
+
+        # p1tables = p1.extract_tables(table_settings)
+        # p2tables = p2.extract_tables(table_settings)
+        # tables = p1tables + p2tables
+        # tables1_bboxes, edges1 = p1.find_tables(table_settings)
+        # tables2_bboxes, edges2 = p2.find_tables(table_settings)
+        # tables_bboxes = tables1_bboxes + tables2_bboxes
 
         # edges in this format:
         # [{  
@@ -228,7 +240,7 @@ def extract_tables(pdf, page, explicit_lines=[]):
         #   'x0': 551.724,
         #   'x1': 551.724
         # }]
-        edges = edges1 + edges2
+        # edges = edges1 + edges2
     
 
     tables_with_bboxes = tuple(zip(tables, tables_bboxes))
@@ -329,7 +341,6 @@ def format_for_text_line(line):
 def scrape_page(pdf, filename, page_number, new_lines=[], output_dir=output_directory):
     print(f'parsing page {page_number} of {pdf.path}')
 
-    print(f'after after: {len(new_lines)}')
     page_text_by_column = extract_text(pdf, page_number).split('\n')
     page_tables, page_text_without_tables, table_bboxes, text_outside_tables_boxes, edges = extract_tables(pdf, page_number, new_lines)
 
@@ -345,8 +356,8 @@ def scrape_page(pdf, filename, page_number, new_lines=[], output_dir=output_dire
 
     table_indexes = get_table_indexes(text_lines, text_lines_without_tables)
     txt_path = os.path.join(output_dir, os.path.splitext(filename)[0] + '-page' + str(page_number + 1) + ".txt")
-    print('tableidx')
-    print(table_indexes)
+    # print('tableidx')
+    # print(table_indexes)
 
     # pp.pprint(page_tables[-1])
     with open(txt_path, 'w', encoding='utf-8') as file:

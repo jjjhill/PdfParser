@@ -32,7 +32,6 @@ async def main():
                         # pp.pprint(initial_edges)
                         
                         new_lines = await edit(pdf, page_number, initial_edges)
-                        # print(len(new_lines))
                         scrape_page(pdf, filename, page_number, new_lines, corrected_directory)
 
 
