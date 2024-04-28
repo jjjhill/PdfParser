@@ -58,7 +58,6 @@ def extend_bbox(bbox, value):
 
 
 def contains_consecutive_horizontal_lines(line_clusters_by_x0, count):
-    print(len(line_clusters_by_x0))
     for j, cluster in enumerate(line_clusters_by_x0):
         consecutive = 1
         prev_y_diff = None
@@ -66,9 +65,6 @@ def contains_consecutive_horizontal_lines(line_clusters_by_x0, count):
         for i, line in enumerate(cluster):
             if i == 0:
                 continue
-            print('prev')
-            pp.pprint(cluster[i-1]['top'])
-            pp.pprint(line['top'])
             y_diff = float(abs(cluster[i-1]['top'] - line['top']))
             if y_diff < 50 and y_diff > 6 and (prev_y_diff is None or abs(y_diff - prev_y_diff) < 3):
                 consecutive += 1
@@ -130,14 +126,12 @@ def predict_open_table_exists(lines_outside_tables):
    
 
 def extract_tables(pdf, page, explicit_lines=[], write_edges=None):
-    # pp.pprint(explicit_lines)
     p = pdf.pages[page]
     merged_edges = snap_edges(
         explicit_lines,
         x_tolerance=5,
         y_tolerance=5,
     )
-    # pp.pprint(list(filter(lambda edge: edge['orientation'] == 'v', merged_edges)))
 
     if explicit_lines and len(explicit_lines) > 1:
         table_settings = {
@@ -155,8 +149,6 @@ def extract_tables(pdf, page, explicit_lines=[], write_edges=None):
         }
     else:
         table_settings = {
-            # "vertical_strategy": "explicit",
-            # "horizontal_strategy": "explicit",
             "explicit_vertical_lines": p.edges,
             "explicit_horizontal_lines": p.edges,
             "intersection_y_tolerance": 3,
@@ -177,27 +169,12 @@ def extract_tables(pdf, page, explicit_lines=[], write_edges=None):
     tables = p.extract_tables(table_settings)
     tables_bboxes, edges = p.find_tables(table_settings)
     page_horiz_lines = get_horizontal_lines(p)
-    # pp.pprint(page_horiz_lines)
-
-    # img = p.to_image(resolution=400)
-    # img.draw_lines(list(map(lambda line: ((line['x0'], line['top']), (line['x1'], line['top'])), page_horiz_lines)), stroke_width=4)
-    # img.save('debug.png')
-    # if horiz_lines_outside_tables(page_horiz_lines, tables_bboxes)
-
-    # p1 = p.crop((0, 0, p.bbox[2]/2, p.bbox[3]))
-    # p2 = p.crop((p.bbox[2]/2, 0, p.bbox[2], p.bbox[3]))
-    # lines_p1 = get_horizontal_lines(p1)
-    # lines_p2 = get_horizontal_lines(p2)
             
 
     # if there are consecutive horizontal lines outside of the current tables,
     # then there's probably more undetected tables
     lines_outside_tables = get_lines_outside_tables(page_horiz_lines, tables_bboxes)
     
-    # img = p.to_image(resolution=400)
-    # img.draw_lines(list(map(lambda line: ((line['x0'], line['top']), (line['x1'], line['top'])), lines_outside_tables)), stroke_width=4)
-    # img.draw_hline(318.4238)
-    # img.save('debug.png')
 
     if len(tables) > 0:
         if write_edges is not None:
@@ -210,16 +187,10 @@ def extract_tables(pdf, page, explicit_lines=[], write_edges=None):
             "min_words_vertical": 5,
         }
         print('table strategy 2 used')
-        # p1 = p.crop((0, 0, p.bbox[2]/2, p.bbox[3]))
-        # p2 = p.crop((p.bbox[2]/2, 0, p.bbox[2], p.bbox[3]))
 
         img = p.to_image(resolution=400)
         img.debug_tablefinder(table_settings)
         img.save('debug.png')
-
-        # if len(lines_outside_tables) > 0:
-        #     p1 = p.crop((0, p.bbox[3]/2 - 150, p.bbox[2], p.bbox[3]/2+120))
-        #     p = p.filter(lambda obj: not_within_bboxes(obj, map(lambda t: t.bbox, tables_bboxes)))
 
         tables = p.extract_tables(table_settings)
         tables_bboxes, edges = p.find_tables(table_settings)
@@ -233,35 +204,11 @@ def extract_tables(pdf, page, explicit_lines=[], write_edges=None):
             "min_words_vertical": 7,
         }
         print('table strategy 3 used to extract possible edges')
-        # p1 = p.crop((0, 0, p.bbox[2]/2, p.bbox[3]))
-        # p2 = p.crop((p.bbox[2]/2, 0, p.bbox[2], p.bbox[3]))
-    
-        # img = p.to_image(resolution=400)
-        # img.debug_tablefinder(table_settings)
-        # img.save('debug1.png')
         
         possible_tables_bboxes, possible_edges = p.find_tables(table_settings)
         if write_edges is not None:
             write_edges(possible_edges)
-        # p1tables = p1.extract_tables(table_settings)
-        # p2tables = p2.extract_tables(table_settings)
-        # tables = p1tables + p2tables
-        # tables1_bboxes, edges1 = p1.find_tables(table_settings)
-        # tables2_bboxes, edges2 = p2.find_tables(table_settings)
-        # tables_bboxes = tables1_bboxes + tables2_bboxes
-
-        # edges in this format:
-        # [{  
-        #   'bottom': 739.4532,
-        #   'height': 703.1333000000001,
-        #   'orientation': 'v',
-        #   'top': 36.31989999999996,
-        #   'x0': 551.724,
-        #   'x1': 551.724
-        # }]
-        # edges = edges1 + edges2
     
-    print(len(tables))
     tables_with_bboxes = tuple(zip(tables, tables_bboxes))
     sorted_items = sorted(tables_with_bboxes, key=cmp_to_key(sort_tables))
     sorted_tables = list(map(lambda x: x[0], sorted_items))
@@ -277,7 +224,7 @@ def extract_tables(pdf, page, explicit_lines=[], write_edges=None):
 def extract_text(pdf, page):
     p = pdf.pages[page]
     text = p.extract_text(use_text_flow=True, x_tolerance=3)
-
+    print(text)
     return text
 
 def get_table_indexes(full_text, text_without_tables):
@@ -319,10 +266,10 @@ def list_to_text_file_table(list):
         if is_title_row(row):
             output.append(format_for_text_line(row[0]))
 
-        elif row_index > 0 and is_title_row(list[row_index - 1]):
-            output.append('------------------------')
+            if row_index < len(list) - 1 and not is_title_row(list[row_index + 1]):
+                output.append('------------------------')
 
-        if any(cell.strip() != '' for cell in list[row_index]):
+        elif any(cell.strip() != '' for cell in list[row_index]):
             output.append(format_for_text_line((' | ').join(list[row_index]).replace('\n','<br>')))
 
     return ('\n').join(output)
