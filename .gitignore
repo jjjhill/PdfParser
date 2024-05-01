@@ -1,2 +1,4 @@
 venv/
 output_files/
+table_edges/
+test_input_files/

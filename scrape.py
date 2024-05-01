@@ -7,10 +7,10 @@ import traceback
 import json
 from pdfplumber.table import snap_edges
 
-pp = pprint.PrettyPrinter(indent=4)
+pp = pprint.PrettyPrinter(indent=4, width=150)
 
-# directory = "input_files" 
-directory = "test_input_files/current/current" 
+# directory = "test_input_files/current/" 
+directory = "input_files" 
 output_directory = "output_files"
 corrected_directory = "output_files/corrected"
 edges_directory = "table_edges"
@@ -84,8 +84,6 @@ def contains_consecutive_horizontal_lines(line_clusters_by_x0, count):
     return False
 
 def get_lines_outside_tables(page_horiz_lines, tables_bboxes):
-    # pp.pprint(page_horiz_lines)
-    # pp.pprint(tables_bboxes[0].bbox)
     outside_lines = []
 
     for line in page_horiz_lines:
@@ -147,16 +145,18 @@ def extract_tables(pdf, page, explicit_lines=[], write_edges=None):
             "text_vertical_ttb": False,
             "min_columns": 2,
         }
+        print('explicit lines strategy used')
     else:
         table_settings = {
             "explicit_vertical_lines": p.edges,
             "explicit_horizontal_lines": p.edges,
             "intersection_y_tolerance": 3,
+            "intersection_x_tolerance": 4,
             "snap_y_tolerance": 5,
             "text_vertical_ttb": False,
             "min_columns": 2,
         }
-    print('table strategy 1 used')
+        print('table strategy 1 used')
     
     img = p.to_image(resolution=400)
     img.draw_lines(list(map(lambda line: ((line['x0'], line['top']), (line['x1'], line['bottom'])), merged_edges)), stroke_width=6)
@@ -217,14 +217,13 @@ def extract_tables(pdf, page, explicit_lines=[], write_edges=None):
     # Get the bounding boxes of the tables on the page.
     bboxes = [table.bbox for table in sorted_bboxes]
 
-    text_outside_tables = p.filter(lambda obj: not_within_bboxes(obj, bboxes)).extract_text(use_text_flow=True, x_tolerance=3).split('\n')
-    text_outside_tables_boxes = p.filter(lambda obj: not_within_bboxes(obj, bboxes)).extract_words(use_text_flow=True, x_tolerance=3)
+    text_outside_tables = p.filter(lambda obj: not_within_bboxes(obj, bboxes)).extract_text(use_text_flow=True, x_tolerance=3, text_vertical_ttb=False).split('\n')
+    text_outside_tables_boxes = p.filter(lambda obj: not_within_bboxes(obj, bboxes)).extract_words(use_text_flow=True, x_tolerance=3, vertical_ttb=False)
     return sorted_tables, text_outside_tables, bboxes, text_outside_tables_boxes, edges
     
 def extract_text(pdf, page):
     p = pdf.pages[page]
-    text = p.extract_text(use_text_flow=True, x_tolerance=3)
-    print(text)
+    text = p.extract_text(use_text_flow=True, x_tolerance=3, text_vertical_ttb=False)
     return text
 
 def get_table_indexes(full_text, text_without_tables):
@@ -234,7 +233,7 @@ def get_table_indexes(full_text, text_without_tables):
     while i < len(text_without_tables):
         current_line = text_without_tables[i]
         if i == len(text_without_tables) - 1 and j < len(full_text) - 1:
-            missing_indices.append(i + 1)
+            missing_indices.append(i)
             break
         elif j < len(full_text) and full_text[j] != current_line:
             missing_indices.append(i)
@@ -316,30 +315,19 @@ def scrape_page(pdf, filename, page_number, new_lines=[], output_dir=output_dire
     page_text_by_column = extract_text(pdf, page_number).split('\n')
     page_tables, page_text_without_tables, table_bboxes, text_outside_tables_boxes, edges = extract_tables(pdf, page_number, new_lines, lambda edges: write_edges(json_edges_path, edges))
 
-    try:
-        page_number_test = int(page_text_by_column[0])
-        ## if the page starts with page number ( if not, next line will throw )
-        page_number_test + 1
-        text_lines = page_text_by_column[1:None]
-        text_lines_without_tables = page_text_without_tables[1:None]
-    except:
-        text_lines = page_text_by_column
-        text_lines_without_tables = page_text_without_tables
+    text_lines = page_text_by_column
+    text_lines_without_tables = page_text_without_tables
 
     table_indexes = get_table_indexes(text_lines, text_lines_without_tables)
+    
     txt_path = os.path.join(output_dir, os.path.splitext(filename)[0] + '-page' + str(page_number + 1) + ".txt")
-    # print('tableidx')
-    # print(table_indexes)
 
-    # pp.pprint(page_tables[-1])
+
     with open(txt_path, 'w', encoding='utf-8') as file:
         table_num = 0
         for i, line in enumerate(text_lines_without_tables):
-            # print(i)
-            # print(line)
             # insert formatted table into correct location
             if i in table_indexes:
-                # print('INSERT TABLE')
                 file.write(list_to_text_file_table(page_tables[table_num]))
                 file.write('\n')
                 table_num += 1
@@ -355,8 +343,6 @@ def scrape_page(pdf, filename, page_number, new_lines=[], output_dir=output_dire
             file.write(list_to_text_file_table(page_tables[table_num]))
             file.write('\n')
             table_num += 1
-
-    # write_edges(json_edges_path, edges)
 
 def main():
     for filename in os.listdir(directory):
